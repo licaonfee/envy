@@ -1,6 +1,7 @@
 package envy
 
 import (
+	"flag"
 	"os"
 	"strings"
 	"sync"
@@ -15,6 +16,45 @@ type Env interface {
 	Environ() []string
 	ExpandEnv(key string) string
 	Expand(key string, mapping func(string) string) string
+}
+
+// DefaultMappingconvert string to uppercase and replace any occurence of - with _
+func DefaultMapping(prefix string) func(string) string {
+	return func(name string) string {
+		return strings.ReplaceAll(strings.ToUpper(prefix+name), "-", "_")
+	}
+}
+
+// FillFlags is equivalent to
+// FillFlagsLookup(f , NewOsEnv(), DefaultMapping(""))
+func FillFlags(f *flag.FlagSet) error {
+	return FillFlagsLookup(f, NewOsEnv(), DefaultMapping(""))
+}
+
+// FillFlagsLookup set values in a flag.FlagSet with environment variables
+// variable names are get calling mapping(flag.Name). An error is returned if
+// flag.Value.Set return an error. This method should be called before flag.Parse
+func FillFlagsLookup(f *flag.FlagSet, e Env, mapping func(string) string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = r.(error)
+		}
+	}()
+	setted := make(map[string]struct{})
+	f.Visit(func(fn *flag.Flag) {
+		setted[fn.Name] = struct{}{}
+	})
+	f.VisitAll(func(fn *flag.Flag) {
+		if _, isSet := setted[fn.Name]; !isSet {
+			name := mapping(fn.Name)
+			if v, ok := e.LookupEnv(name); ok {
+				if err := fn.Value.Set(v); err != nil {
+					panic(err)
+				}
+			}
+		}
+	})
+	return nil
 }
 
 var _ Env = (*MapEnv)(nil)
