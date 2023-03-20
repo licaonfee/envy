@@ -2,7 +2,10 @@ package envy
 
 import (
 	"flag"
+	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -57,6 +60,70 @@ func FillFlagsLookup(f *flag.FlagSet, e Env, mapping func(string) string) (err e
 	return nil
 }
 
+type VarType int
+
+const (
+	VarTypeUnknown = VarType(iota)
+	VarTypeString
+	VarTypeMap
+	VarTypeArray
+)
+
+// FilterPrefix returns the name and type only if the environment variable have the given preffix
+// it returns as name , the lower case version of the variable with preffix stripped
+func FilterPrefix(preffix string) func(string) (string, VarType) {
+	isArray := regexp.MustCompile(`_[0-9]*$`)
+	return func(s string) (string, VarType) {
+		ok := strings.HasPrefix(s, preffix)
+		if !ok {
+			return "", VarTypeUnknown
+		}
+		s = strings.ToLower(strings.TrimPrefix(s, preffix))
+		switch {
+		case isArray.MatchString(s):
+			return s, VarTypeArray
+		default:
+			return s, VarTypeString
+		}
+	}
+}
+
+// FillMap return a map with all environment variables that match filter function
+func FillMap(e Env, filter func(string) (string, VarType)) map[string]any {
+	values := make(map[string]any)
+	for _, v := range e.Environ() {
+		key, value, _ := strings.Cut(v, "=")
+		name, t := filter(key)
+		switch t {
+		case VarTypeUnknown:
+			continue
+		case VarTypeString:
+			values[name] = value
+		case VarTypeArray:
+			l := strings.LastIndex(name, "_")
+			number, _ := strconv.Atoi(name[l+1:])
+			name := name[:l]
+			x, ok := values[name]
+			if !ok {
+				y := make([]string, 0)
+				x = y
+			}
+			z, ok := x.([]string)
+			if !ok {
+				z = []string{fmt.Sprint(z)} // coerce string
+			}
+			if len(z)-1 < number {
+				w := make([]string, number+1)
+				copy(w, z)
+				z = w
+			}
+			z[number] = value
+			values[name] = z
+		}
+	}
+	return values
+}
+
 var _ Env = (*MapEnv)(nil)
 
 type MapEnv struct {
@@ -88,11 +155,13 @@ func (m *MapEnv) Unsetenv(key string) error {
 	delete(m.env, key)
 	return nil
 }
+
 func (m *MapEnv) Clearenv() {
 	m.l.Lock()
 	defer m.l.Unlock()
 	m.env = map[string]string{}
 }
+
 func (m *MapEnv) Environ() []string {
 	list := make([]string, 0, len(m.env))
 	for k, v := range m.env {

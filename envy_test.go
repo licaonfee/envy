@@ -148,7 +148,7 @@ func TestCleanenv(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.env.Clearenv()
 			got := tt.env.Getenv("cleaned_key01")
-			got = got + tt.env.Getenv("cleaned_key02")
+			got += tt.env.Getenv("cleaned_key02")
 			if got != "" {
 				t.Errorf("Cleanenv() got = %s , want = \"\"", got)
 			}
@@ -242,6 +242,50 @@ func TestFillFlagsLookup(t *testing.T) {
 				if !reflect.DeepEqual(val, v) {
 					t.Fatalf("FillFlagLookup() got = %v , want = %v", val, v)
 				}
+			}
+		})
+	}
+}
+
+func TestFillMap(t *testing.T) {
+	tests := map[string]struct {
+		env    envy.Env
+		filter func(string) (string, envy.VarType)
+		want   map[string]any
+	}{
+		"only strings": {
+			env: envy.NewMapEnv(map[string]string{
+				"TEST01_FOO": "var 01",
+				"TEST01_BAR": "var 02",
+				"TEST01_BAZ": "var 03"}),
+			filter: envy.FilterPrefix("TEST01_"),
+			want: map[string]any{
+				"foo": "var 01",
+				"bar": "var 02",
+				"baz": "var 03",
+			},
+		},
+		"array": {
+			env: envy.NewMapEnv(map[string]string{
+				"TEST_CONFIG":  "path",
+				"TEST_USERS_0": "user00",
+				"TEST_USERS_1": "user01",
+				"TEST_USERS_2": "user02",
+				"TEST_USERS_3": "user03",
+			}),
+			filter: envy.FilterPrefix("TEST_"),
+			want: map[string]any{
+				"config": "path",
+				"users":  []string{"user00", "user01", "user02", "user03"},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := envy.FillMap(tt.env, tt.filter)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("FillMap got %v, want %v", got, tt.want)
 			}
 		})
 	}
