@@ -250,7 +250,7 @@ func TestFillFlagsLookup(t *testing.T) {
 func TestFillMap(t *testing.T) {
 	tests := map[string]struct {
 		env    envy.Env
-		filter func(string) (string, envy.VarType)
+		filter func(string) (envy.VarName, envy.VarType)
 		want   map[string]any
 	}{
 		"only strings": {
@@ -279,13 +279,28 @@ func TestFillMap(t *testing.T) {
 				"users":  []string{"user00", "user01", "user02", "user03"},
 			},
 		},
+		"map": {
+			env: envy.NewMapEnv(map[string]string{
+				"TEST_CONFIG":        "path",
+				"TEST_USERS_0":       "user00",
+				"TEST_USERS_1":       "user01",
+				"TEST_ADDR_DEFAULT":  "localhost",
+				"TEST_ADDR_FALLBACK": "127.0.0.1",
+			}),
+			filter: envy.FilterPrefix("TEST_", "addr"),
+			want: map[string]any{
+				"config": "path",
+				"users":  []string{"user00", "user01"},
+				"addr":   map[string]string{"default": "localhost", "fallback": "127.0.0.1"},
+			},
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := envy.FillMap(tt.env, tt.filter)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("FillMap got %v, want %v", got, tt.want)
+				t.Fatalf("FillMap got %#v, want %#v", got, tt.want)
 			}
 		})
 	}

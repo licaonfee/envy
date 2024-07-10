@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,27 +70,57 @@ const (
 	VarTypeArray
 )
 
+type VarName struct {
+	Name  string
+	Key   string
+	Index int
+}
+
 // FilterPrefix returns the name and type only if the environment variable have the given preffix
-// it returns as name , the lower case version of the variable with preffix stripped
-func FilterPrefix(preffix string) func(string) (string, VarType) {
+// it returns as name , the lower case version of the variable with preffix stripped if stripped name
+// match with any value of asMap , then VarTypeMap is returned this considers firsh match
+// asMap values are matched with a suffix "_"
+func FilterPrefix(preffix string, asMap ...string) func(string) (VarName, VarType) {
 	isArray := regexp.MustCompile(`_[0-9]*$`)
-	return func(s string) (string, VarType) {
+	var lowerMap []string
+	for _, v := range asMap {
+		lowerMap = append(lowerMap, strings.ToLower(v))
+	}
+	slices.Sort(lowerMap)
+	lowerMap = slices.Compact(lowerMap)
+
+	return func(s string) (VarName, VarType) {
 		ok := strings.HasPrefix(s, preffix)
 		if !ok {
-			return "", VarTypeUnknown
+			return VarName{}, VarTypeUnknown
 		}
 		s = strings.ToLower(strings.TrimPrefix(s, preffix))
+		isMap := false
+		mapName := ""
+		mapPrefix := ""
+		for _, m := range lowerMap {
+			mapPrefix = m + "_"
+			if strings.HasPrefix(s, mapPrefix) {
+				isMap = true
+				mapName = m
+			}
+		}
 		switch {
+		case isMap:
+			return VarName{Name: mapName, Key: strings.TrimPrefix(s, mapPrefix), Index: 0}, VarTypeMap
 		case isArray.MatchString(s):
-			return s, VarTypeArray
+			l := strings.LastIndex(s, "_")
+			index, _ := strconv.Atoi(s[l+1:])
+			name := s[:l]
+			return VarName{Name: name, Key: "", Index: index}, VarTypeArray
 		default:
-			return s, VarTypeString
+			return VarName{Name: s}, VarTypeString
 		}
 	}
 }
 
 // FillMap return a map with all environment variables that match filter function
-func FillMap(e Env, filter func(string) (string, VarType)) map[string]any {
+func FillMap(e Env, filter func(string) (VarName, VarType)) map[string]any {
 	values := make(map[string]any)
 	for _, v := range e.Environ() {
 		key, value, _ := strings.Cut(v, "=")
@@ -98,12 +129,9 @@ func FillMap(e Env, filter func(string) (string, VarType)) map[string]any {
 		case VarTypeUnknown:
 			continue
 		case VarTypeString:
-			values[name] = value
+			values[name.Name] = value
 		case VarTypeArray:
-			l := strings.LastIndex(name, "_")
-			number, _ := strconv.Atoi(name[l+1:])
-			name := name[:l]
-			x, ok := values[name]
+			x, ok := values[name.Name]
 			if !ok {
 				y := make([]string, 0)
 				x = y
@@ -112,13 +140,26 @@ func FillMap(e Env, filter func(string) (string, VarType)) map[string]any {
 			if !ok {
 				z = []string{fmt.Sprint(z)} // coerce string
 			}
-			if len(z)-1 < number {
-				w := make([]string, number+1)
+
+			if len(z)-1 < name.Index {
+				w := make([]string, name.Index+1)
 				copy(w, z)
 				z = w
 			}
-			z[number] = value
-			values[name] = z
+			z[name.Index] = value
+			values[name.Name] = z
+		case VarTypeMap:
+			x, ok := values[name.Name]
+			if !ok {
+				y := make(map[string]string)
+				x = y
+			}
+			z, ok := x.(map[string]string)
+			if !ok {
+				z = make(map[string]string) // delete conflict values
+			}
+			z[name.Key] = value
+			values[name.Name] = z
 		}
 	}
 	return values
