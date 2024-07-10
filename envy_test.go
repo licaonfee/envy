@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/licaonfee/envy"
+	"github.com/licaonfee/envy/v2"
 )
 
 func TestGetEnv(t *testing.T) {
