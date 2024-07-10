@@ -48,12 +48,15 @@ import (
 type config struct {
 	Path  string   `mapstructure:"path"`
 	Users []string `mapstructure:"users"`
+	Address map[string]string `mapstructure:"address"`
 }
 
 // Environment
 // APP_PATH=log.log
 // APP_USERS_0=one_user
 // APP_USERS_1=other_user
+// APP_ADDRESS_LOCAL=localhost
+// APP_ADDRESS_REMOTE=8.8.8.8
 
 func main() {
 	var cfg config
