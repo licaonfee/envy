@@ -103,6 +103,7 @@ func FilterPrefix(preffix string, asMap ...string) func(string) (VarName, VarTyp
 			if strings.HasPrefix(s, mapPrefix) {
 				isMap = true
 				mapName = m
+				break
 			}
 		}
 		switch {

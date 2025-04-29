@@ -294,6 +294,24 @@ func TestFillMap(t *testing.T) {
 				"addr":   map[string]string{"default": "localhost", "fallback": "127.0.0.1"},
 			},
 		},
+		"two maps": {
+			env: envy.NewMapEnv(map[string]string{
+				"TEST_CONFIG":          "path",
+				"TEST_USERS_0":         "user00",
+				"TEST_USERS_1":         "user01",
+				"TEST_ADDR_DEFAULT":    "localhost",
+				"TEST_ADDR_FALLBACK":   "127.0.0.1",
+				"TEST_ALIAS_MAIN":      "fenix",
+				"TEST_ALIAS_SECONDARY": "gryphon",
+			}),
+			filter: envy.FilterPrefix("TEST_", "addr", "alias"),
+			want: map[string]any{
+				"config": "path",
+				"users":  []string{"user00", "user01"},
+				"addr":   map[string]string{"default": "localhost", "fallback": "127.0.0.1"},
+				"alias":  map[string]string{"main": "fenix", "secondary": "gryphon"},
+			},
+		},
 	}
 
 	for name, tt := range tests {
